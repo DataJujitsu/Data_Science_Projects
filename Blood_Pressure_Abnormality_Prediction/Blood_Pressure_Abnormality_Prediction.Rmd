@@ -1,0 +1,382 @@
+---
+title: "AbsolutData Case Study"
+author: "Arpit Gupta (arpit.gupta2008@gmail.com)"
+date: "30 September 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+### *Background*
+Hypertension with aging is a major medical concern even in this ultramodern era of advanced therapies. Preliminary testing is a key element in analyzing the procedures of mild abnormality of blood pressure for a substantial period of time, but presently has a limited value in the prediction of progression to hypertension. Although hypotension, low blood pressure in common parlance, is less common among the ones with abnormal blood pressure, but the adverse effect it has on their health is equivalent to that of hypertension.
+
+Although recent studies have hypothesized that, keeping other factors constant, hemoglobin level is positively associated with blood pressure in a large cohort of healthy individuals, but genetic causes are also prominent in some of individuals. However, there are numerous other factors which determine whether an individual is likely to develop this abnormality.
+
+
+### *Objective*
+Employing statistical techniques, conduct a preliminary prognosis of Hypertension/hypotension.
+
+***
+
+#### Loading Required packages
+
+
+```{r ,message=F, warning=F, results='hide'}
+list.of.packages <- c("tidyverse","MASS","car", "caret","cowplot","caTools","pROC","ggcorrplot", "corrplot", "rpart","rpart.plot","randomForest")
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+if (length(new.packages)) {install.packages(new.packages)}
+
+t<-sapply(list.of.packages,library, character.only =T)
+rm(t)
+```
+
+
+#### Load Blood Pressure Data
+```{r}
+df<- read.csv("Training Data - Classification of Patients with Abnormal Blood Pressure (N=2000)_27-Jul-2016.csv")
+glimpse(df)
+```
+
+Replacing null with 0
+```{r}
+df[is.na(df)]<-0  # replace all null with 0
+```
+
+
+## Exploratory Data Analysis
+
+* Blood_Pressure_Abnormality columns tells us about the number of Customers who suffered from hypertension\hypotension.
+* Around 49% of customers suffered from hypertension\hypotension :
+
+```{r}
+df %>% 
+  group_by(Blood_Pressure_Abnormality) %>% 
+  summarise(Count = n())%>% 
+  mutate(percent = prop.table(Count)*100)%>%
+  ggplot(aes(reorder(Blood_Pressure_Abnormality, -percent), percent), fill = Blood_Pressure_Abnormality)+
+  geom_col(fill = c("#FC4E07", "#E7B800"))+
+  geom_text(aes(label = sprintf("%.2f%%", percent)), hjust = 0.01,vjust = -0.5, size =3)+ 
+  theme_bw()+  
+  xlab("Blood_Pressure_Abnormality") + 
+  ylab("Percent")+
+  ggtitle("Blood_Pressure_Abnormality Percent")
+
+```
+
+
+
+
+#### Check for collinearity 
+```{r}
+corrplot(cor(df[sapply(df[,-c(1:2)], is.numeric),-c(1:2)]))
+```
+
+```{r}
+df_factor_variables<- c("Blood_Pressure_Abnormality","Sex","Pregnancy","Smoking","Level_of_Stress",
+                        "Chronic_kidney_disease","Adrenal_and_thyroid_disorders")
+
+df[df_factor_variables]<- as.data.frame(lapply(df[df_factor_variables], as.factor))
+```
+
+
+#### Visualising Categorical Data
+* Gender- Male have slightly higher chances of suffering from hypertension\hypotension
+* People with chronic kidney disease or adrenal & thyriod disorders have higher rate of suffering from hypertension\hypetension.
+
+```{r, fig.width=10, fig.height=9}
+options(repr.plot.width = 12, repr.plot.height = 10)
+plot_grid(ggplot(df, aes(x=Sex,fill=Blood_Pressure_Abnormality))+ geom_bar()+ theme_bw(), 
+          ggplot(df, aes(x=Pregnancy,fill=Blood_Pressure_Abnormality))+ geom_bar(position = 'fill')+theme_bw(),
+          ggplot(df, aes(x=Smoking,fill=Blood_Pressure_Abnormality))+ geom_bar(position = 'fill')+theme_bw(),
+          ggplot(df, aes(x=Level_of_Stress ,fill=Blood_Pressure_Abnormality))+ geom_bar(position = 'fill')+theme_bw(),
+          ggplot(df, aes(x=Chronic_kidney_disease,fill=Blood_Pressure_Abnormality))+ geom_bar(position = 'fill')+theme_bw(),
+          ggplot(df, aes(x=Adrenal_and_thyroid_disorders ,fill=Blood_Pressure_Abnormality))+ geom_bar(position = 'fill')+theme_bw()+
+          scale_x_discrete(labels = function(x) str_wrap(x, width = 10)),
+          align = "h", nrow = 3)
+```
+
+#### Visualising continuous data
+* Hemoglobin Level - People with higher level of hemoglobin have higher chances of suffering.
+* People with higher genetic pedigree coefficient ratio have higher chances of suffering. 
+
+```{r, fig.width=10}
+options(repr.plot.width = 12, repr.plot.height = 10)
+plot_grid(ggplot(df, aes(Blood_Pressure_Abnormality, Level_of_Hemoglobin,fill=Blood_Pressure_Abnormality))+ geom_boxplot()+ theme_bw(), 
+          ggplot(df, aes(Blood_Pressure_Abnormality, Genetic_Pedigree_Coefficient,fill=Blood_Pressure_Abnormality))+ geom_boxplot()+ theme_bw(), 
+          ggplot(df, aes(Blood_Pressure_Abnormality, Age,fill=Blood_Pressure_Abnormality))+ geom_boxplot()+ theme_bw(), 
+          ggplot(df, aes(Blood_Pressure_Abnormality, BMI,fill=Blood_Pressure_Abnormality))+ geom_boxplot()+ theme_bw()+
+           scale_x_discrete(labels = function(x) str_wrap(x, width = 10)),
+          align = "h", ncol = 2)
+
+
+```
+
+
+```{r, fig.width=10}
+options(repr.plot.width = 12, repr.plot.height = 10)
+plot_grid(ggplot(df, aes(Blood_Pressure_Abnormality, Physical_activity,fill=Blood_Pressure_Abnormality))+ geom_boxplot()+ theme_bw(), 
+          ggplot(df, aes(Blood_Pressure_Abnormality, salt_content_in_the_diet,fill=Blood_Pressure_Abnormality))+ geom_boxplot()+ theme_bw(), 
+          ggplot(df, aes(Blood_Pressure_Abnormality, alcohol_consumption_per_day,fill=Blood_Pressure_Abnormality))+ geom_boxplot()+ theme_bw()+
+           scale_x_discrete(labels = function(x) str_wrap(x, width = 10)),
+          align = "h", ncol = 2)
+
+
+```
+
+
+  
+```{r}
+num_columns<- c("Level_of_Hemoglobin","Age","BMI","Physical_activity","salt_content_in_the_diet","alcohol_consumption_per_day")
+df_cor <- round(cor(df[,num_columns]), 1)
+# ggcorrplot(df_cor,  title = "Correlation")+theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+
+
+#### Preparing the data
+```{r}
+
+df_final<- df
+df_final<- df[,-1]
+
+```
+
+```{r}
+#Splitting the data
+set.seed(123)
+indices = sample.split(df_final$Blood_Pressure_Abnormality, SplitRatio = 0.7)
+train = df_final[indices,]
+validation = df_final[!(indices),]
+
+
+  
+```
+
+## Model Building 1 - Logistic Regression
+```{r}
+#Build the first model using all variables
+model_1 = glm(Blood_Pressure_Abnormality ~ ., data = train, family = "binomial")
+summary(model_1)
+
+```
+
+
+Using stepAIC for variable selection, which is a iterative process of adding or removing variables, in order to get a subset of variables that gives the best performing model.
+
+```{r echo=TRUE, results='hide'}
+model_2<- stepAIC(model_1, direction="both")
+```
+
+```{r}
+summary(model_2)
+
+```
+
+We can use variance inflation factor (vif) to get rid of redundant predictors or the variables that have high multicollinearity between them. Multicollinearity exists when two or more predictor variables are highly related to each other and then it becomes difficult to understand the impact of an independent variable on the dependent variable.
+
+The Variance Inflation Factor(VIF) is used to measure the multicollinearity between predictor variables in a model. A predictor having a VIF of 2 or less is generally considered safe and it can be assumed that it is not correlated with other predictor variables. Higher the VIF, greater is the correlation of the predictor variable w.r.t other predictor variables. However, Predictors with high VIF may have high p-value(or highly significant), hence, we need to see the significance of the Predictor variable before removing it from our model.
+```{r}
+vif(model_2)
+
+```
+
+```{r}
+#Removing Physical_activity due to high p-value 
+model_3 <-glm(formula = Blood_Pressure_Abnormality ~ Level_of_Hemoglobin + BMI + Sex + 
+                 Chronic_kidney_disease + Adrenal_and_thyroid_disorders
+              , family = "binomial", data = train)
+summary(model_3)
+vif(model_3)
+```
+
+```{r}
+
+final_model <- model_2
+
+```
+
+#### Model Evaluation using the validation data:
+```{r}
+
+pred <- predict(final_model, type = "response", newdata = validation[,-1])
+summary(pred)
+validation$prob <- pred
+
+# Using probability cutoff of 50%.
+
+pred_ht <- factor(ifelse(pred >= 0.50, "Yes", "No"))
+actual_ht <- factor(ifelse(validation$Blood_Pressure_Abnormality==1,"Yes","No"))
+table(actual_ht,pred_ht)
+
+```
+
+#### Accuracy, Sensitivity, Specificity using 50% cutoff
+```{r}
+
+
+cutoff_ht <- factor(ifelse(pred >=0.50, "Yes", "No"))
+conf_final <- confusionMatrix(cutoff_ht, actual_ht, positive = "Yes")
+accuracy <- conf_final$overall[1]
+sensitivity <- conf_final$byClass[1]
+specificity <- conf_final$byClass[2]
+accuracy
+sensitivity
+specificity
+```
+
+#### When using cutoff of 0.5, we are getting accuracy, sensitivity, and specificity of 70%. Lets find out optimal probability cutoff which will give maximum values for these metrics. 
+
+```{r}
+
+perform_fn <- function(cutoff) 
+{
+  predicted_ht <- factor(ifelse(pred >= cutoff, "Yes", "No"))
+  conf <- confusionMatrix(predicted_ht, actual_ht, positive = "Yes")
+  accuray <- conf$overall[1]
+  sensitivity <- conf$byClass[1]
+  specificity <- conf$byClass[2]
+  out <- t(as.matrix(c(sensitivity, specificity, accuray))) 
+  colnames(out) <- c("sensitivity", "specificity", "accuracy")
+  return(out)
+}
+
+```
+```{r echo=TRUE, results='hide'}
+options(repr.plot.width =8, repr.plot.height =6)
+summary(pred)
+s = seq(0.01,0.80,length=100)
+OUT = matrix(0,100,3)
+
+for(i in 1:100)
+{
+  OUT[i,] = perform_fn(s[i])
+} 
+```
+
+```{r}
+plot(s, OUT[,1],xlab="Cutoff",ylab="Value",cex.lab=1.5,cex.axis=1.5,ylim=c(0,1),
+     type="l",lwd=2,axes=FALSE,col=2)
+axis(1,seq(0,1,length=5),seq(0,1,length=5),cex.lab=1.5)
+axis(2,seq(0,1,length=5),seq(0,1,length=5),cex.lab=1.5)
+lines(s,OUT[,2],col="darkgreen",lwd=2)
+lines(s,OUT[,3],col=4,lwd=2)
+box()
+legend("bottom",col=c(2,"darkgreen",4,"darkred"),text.font =3,inset = 0.02,
+       box.lty=0,cex = 0.8, 
+       lwd=c(2,2,2,2),c("Sensitivity","Specificity","Accuracy"))
+abline(v = 0.5, col="red", lwd=1, lty=2)
+axis(1, at = seq(0.1, 1, by = 0.1))
+
+```
+The above chart shows the optimal cutoff value which will give maximum values for accuracy, sensitivity, specificity. Optimal cutoff value is 0.5 
+
+
+## Model Building 2 - Decision Tree
+
+Splits the data into multiple sets and each set is further split into subsets to arrive at a tree like structure and make a decision. Homogeneity is the basic concept that helps to determine the attribute on which a split should be made. A split that results into the most homogenous subset is often considered better and step by step each attribute is choosen that maximizes the homogeneity of each subset. Further, this homogeneity is measured using different ways such as Gini Index, Entropy and Information Gain.
+
+
+
+
+#### Training the Decision Tree model using all variables & Predicting in the validation data
+```{r echo=TRUE, results='hide'}
+#Training
+Dtree = rpart(Blood_Pressure_Abnormality ~., data = train, method = "class")
+summary(Dtree)
+
+#Predicting 
+DTPred <- predict(Dtree,type = "class", newdata = validation[,-1])
+
+```
+
+####  Checking the Confusion Matrix
+```{r}
+
+confusionMatrix(validation$Blood_Pressure_Abnormality, DTPred)
+```
+The decision tree model (accuracy - 85%) gives very higher better accuracy with respect to the logistic regression model (accuracy 70%). The sensitivity is also better in case of Decision tree which is 90%. The specificity has also increased to 82% in case of Decision Tree as compared to logistic regression model.
+
+## Model Building 3- Random Forest
+Random Forest is often known as an ensemble of a large number of Decision Trees, that uses bootstrapped aggregation technique to choose random samples from a dataset to train each tree in the forest. The final prediction in a RandomForest is an aggregation of prediction of individual trees. 
+
+
+```{r}
+
+model.rf <- randomForest(Blood_Pressure_Abnormality ~ ., data=train, proximity=FALSE,importance = FALSE,
+                         ntree=500,mtry=4, do.trace=FALSE)
+model.rf
+
+```
+
+The OOB error estimate comes to around 11.29%, so the model has around 88% out of sample accuracy for the training set. finding prediction and accuracy on  validation data.
+```{r}
+
+#Predicting on the validation set and checking the Confusion Matrix.
+testPred <- predict(model.rf, newdata=validation[,-1])
+table(testPred, validation$Blood_Pressure_Abnormality)
+
+confusionMatrix(validation$Blood_Pressure_Abnormality, testPred)
+
+
+```
+RandomForest model gives an accuracy of 87%( almost close enough to the OOB estimate), Sensitivity 89.79% and Specificity 84.49%.,
+
+#### Variable Importance Plot
+
+Generating variable importance plot, that shows the most significant attribute in decreasing order by mean decrease in Gini. The Mean decrease Gini measures how pure the nodes are at the end of the tree. Higher the Gini Index, better is the homogeneity.
+```{r}
+#Checking the variable Importance Plot
+varImpPlot(model.rf)
+```
+
+#### Checking the AUC for all three models:
+```{r}
+
+options(repr.plot.width =10, repr.plot.height = 8)
+
+glm.roc <- roc(response = validation$Blood_Pressure_Abnormality, predictor = as.numeric(pred))
+DT.roc <- roc(response = validation$Blood_Pressure_Abnormality, predictor = as.numeric(DTPred))
+rf.roc <- roc(response = validation$Blood_Pressure_Abnormality, predictor = as.numeric(testPred))
+
+plot(glm.roc,      legacy.axes = TRUE, print.auc.y = 1.0, print.auc = TRUE)
+plot(DT.roc, col = "blue", add = TRUE, print.auc.y = 0.65, print.auc = TRUE)
+plot(rf.roc, col = "red" , add = TRUE, print.auc.y = 0.85, print.auc = TRUE)
+legend("bottom", c("Random Forest", "Decision Tree", "Logistic"),
+       lty = c(1,1), lwd = c(2, 2), col = c("red", "blue", "black"), cex = 0.75)
+
+
+
+
+
+```
+
+
+#### A brief Summary of all the models:
+
+Logistic Regression:
+
+* Accuracy 70.16%
+* Sensitivity 70.94%
+* Specificity 69.40%
+
+
+DecisionTrees:
+
+* Accuracy 85.83%
+* Sensitivity 90.11%
+* Specificity 82.26%
+
+
+RandomForest:
+
+* Accuracy 87%
+* Sensitivity 89.24%
+* Specificity 84.94%
+
+
+
+#### Decision Trees performed better than Logistic Regression and slightly less than Random Forest. Since it is easy to interpret than Random Forest, selecting ***Decision Trees*** as final model.
