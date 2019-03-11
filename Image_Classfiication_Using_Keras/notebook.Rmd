@@ -1,0 +1,195 @@
+---
+title: "Image Recognition using Keras - Convolutional Neural Networks"
+author: "Arpit Gupta (arpit.gupta2008@gmail.com)"
+# output:
+#   html_document:
+#     df_print: paged
+output: rmarkdown::github_document
+---
+
+<style>
+    body .main-container {
+        max-width: 1200px;  ## change width
+    }
+</style>
+
+#### Loading Required packages
+```{r,message=F, warning=F}
+#devtools::install_github('aoles/EBImage')
+library(keras)
+library(EBImage)
+
+```
+
+#### Read Images - Training images
+```{r}
+
+pic1 <- c('p1.jpg', 'p2.jpg', 'p3.jpg', 'p4.jpg', 'p5.jpg',
+          'c1.jpg', 'c2.jpg', 'c3.jpg', 'c4.jpg', 'c5.jpg',
+          'b1.jpg', 'b2.jpg', 'b3.jpg', 'b4.jpg', 'b5.jpg')
+pic1<-paste("./Data/",pic1,sep = "")
+train <- list()
+for (i in 1:15) {train[[i]] <- readImage(pic1[i])}
+```
+
+#### Read Images - Testing images
+```{r}
+pic2 <- c('p6.jpg', 'c6.jpg', 'b6.jpg')
+pic2<-paste("./Data/",pic2,sep = "")
+test <- list()
+for (i in 1:3) {test[[i]] <- readImage(pic2[i])}
+```
+
+#### Explore
+```{r}
+print(train[[12]])
+summary(train[[12]])
+display(train[[12]])
+plot(train[[12]])
+
+```
+
+#### Plot all Training Images
+```{r}
+par(mfrow = c(3,5))
+for (i in 1:15) plot(train[[i]])
+par(mfrow = c(1,1))
+```
+
+
+```{r}
+str(train)
+```
+#### Resize & combine
+```{r}
+for (i in 1:15) {train[[i]] <- resize(train[[i]], 100, 100)}
+for (i in 1:3) {test[[i]] <- resize(test[[i]], 100, 100)}
+
+train <- combine(train)
+x <- tile(train, 5)
+display(x, title='Pictures')
+
+```
+
+
+```{r}
+test <- combine(test)
+y <- tile(test, 3)
+display(y, title = 'Pics')
+```
+
+#### Reorder dimension
+```{r}
+train <- aperm(train, c(4, 1, 2, 3))
+test <- aperm(test, c(4, 1, 2, 3))
+str(train)
+
+```
+
+#### Response
+```{r}
+trainy <- c(0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2)
+testy <- c(0, 1, 2)
+```
+
+
+#### One hot encoding
+```{r}
+trainLabels <- to_categorical(trainy)
+testLabels <- to_categorical(testy)
+```
+
+## Keras Model
+```{r}
+# Building sequential model
+model <- keras_model_sequential()
+
+model %>%
+         layer_conv_2d(filters = 32, 
+                       kernel_size = c(3,3),
+                       activation = 'relu',
+                       input_shape = c(100,100, 3)) %>%
+         layer_conv_2d(filters = 32,
+                       kernel_size = c(3,3),
+                       activation = 'relu') %>%
+         layer_max_pooling_2d(pool_size = c(2,2)) %>%
+         layer_dropout(rate = 0.25) %>%
+         layer_conv_2d(filters = 64,
+                       kernel_size = c(3,3),
+                       activation = 'relu') %>%
+         layer_conv_2d(filters = 64,
+                       kernel_size = c(3,3),
+                       activation = 'relu') %>%
+         layer_max_pooling_2d(pool_size = c(2,2)) %>%
+         layer_dropout(rate = 0.25) %>%
+         layer_flatten() %>%
+         layer_dense(units = 256, activation = 'relu') %>%
+         layer_dropout(rate=0.25) %>%
+         layer_dense(units = 3, activation = 'softmax') %>%
+         
+         compile(loss = 'categorical_crossentropy',
+                 optimizer = optimizer_sgd(lr = 0.01,
+                                           decay = 1e-6,
+                                           momentum = 0.9,
+                                           nesterov = T),
+                 metrics = c('accuracy'))
+summary(model)
+
+```
+
+### Fit model
+```{r}
+
+history <- model %>%
+         fit(train,
+             trainLabels,
+             epochs = 60,
+             batch_size = 32,
+             validation_split = 0.2
+             #, validation_data = list(test, testLabels)
+             )
+
+```
+
+### Plot the model
+```{r}
+
+plot(history)
+```
+
+### Evaluation & Prediction - train data
+```{r}
+
+model %>% evaluate(train, trainLabels)
+pred <- model %>% predict_classes(train)
+table(Predicted = pred, Actual = trainy)
+```
+
+### Evaluation & Prediction of Probabilities - train data
+```{r}
+
+prob <- model %>% predict_proba(train)
+cbind(prob, Predicted_class = pred, Actual = trainy)
+```
+
+### Evaluation & Prediction - test data
+```{r}
+
+model %>% evaluate(test, testLabels)
+pred <- model %>% predict_classes(test)
+table(Predicted = pred, Actual = testy)
+```
+
+### Evaluation & Prediction of Probabilities - test data
+```{r}
+
+prob <- model %>% predict_proba(test)
+cbind(prob, Predicted_class = pred, Actual = testy)
+```
+
+```{r}
+
+
+```
+
+
