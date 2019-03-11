@@ -2,11 +2,6 @@ Image Recognition using Keras - Convolutional Neural Networks
 ================
 Arpit Gupta (<arpit.gupta2008@gmail.com>)
 
-<style>
-    body .main-container {
-        max-width: 1200px;  ## change width
-    }
-</style>
 #### Loading Required packages
 
 ``` r
