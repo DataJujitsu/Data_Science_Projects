@@ -1,10 +1,10 @@
 ---
 title: "Image Recognition using Keras - Convolutional Neural Networks"
 author: "Arpit Gupta (arpit.gupta2008@gmail.com)"
-# output:
-#   html_document:
-#     df_print: paged
-output: rmarkdown::github_document
+output:
+  html_document:
+    df_print: paged
+#output: rmarkdown::github_document
 ---
 
 <style>
