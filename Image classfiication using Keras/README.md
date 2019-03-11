@@ -2,4 +2,4 @@
 
 
 
-### Immage Classification using Keras and Tensorflow in R
+### Image Classification using Keras and Tensorflow in R
